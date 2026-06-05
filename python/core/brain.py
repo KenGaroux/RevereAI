@@ -1,11 +1,16 @@
 import requests
 import sys
 import os
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 from config.reverie import SYSTEM_PROMPT, DEFAULT_MODEL, OLLAMA_URL
 
 CHAT_URL = f"{OLLAMA_URL}/api/chat"
+
+app = Flask(__name__)
+CORS(app)
 
 conversation_history = []
 
@@ -31,15 +36,26 @@ def ask(prompt, model=DEFAULT_MODEL):
     except Exception as e:
         return f"Reverie is unreachable: {e}"
 
+@app.route('/ask', methods=['POST'])
+def ask_endpoint():
+    data = request.json
+    prompt = data.get('prompt', '')
+    model = data.get('model', DEFAULT_MODEL)
+    if not prompt:
+        return jsonify({'error': 'No prompt provided'}), 400
+    reply = ask(prompt, model)
+    return jsonify({'reply': reply})
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'Reverie is online'})
+
+@app.route('/reset', methods=['POST'])
+def reset():
+    global conversation_history
+    conversation_history = []
+    return jsonify({'status': 'Memory cleared'})
+
 if __name__ == "__main__":
-    print("Reverie online. Type 'quit' to exit.")
-    print("-" * 40)
-    while True:
-        user_input = input("You: ").strip()
-        if not user_input:
-            continue
-        if user_input.lower() == "quit":
-            print("Reve: Later.")
-            break
-        reply = ask(user_input)
-        print(f"Reve: {reply}\n")
+    print("Reverie API online at http://0.0.0.0:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False)

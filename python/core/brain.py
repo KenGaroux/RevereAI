@@ -1,7 +1,7 @@
 import requests
 import sys
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
@@ -35,6 +35,10 @@ def ask(prompt, model=DEFAULT_MODEL):
         return reply
     except Exception as e:
         return f"Reverie is unreachable: {e}"
+
+@app.route('/')
+def index():
+    return send_file(os.path.join(os.path.dirname(__file__), 'chat.html'))
 
 @app.route('/ask', methods=['POST'])
 def ask_endpoint():

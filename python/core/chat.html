@@ -114,7 +114,7 @@
 <body>
     <header>
         <h1>Reverie</h1>
-        <span>DeathAI — Built by Daniel Newton</span>
+        <span>DeathAI — Built by D.Newton</span>
     </header>
     <div id="chat"></div>
     <div id="input-area">
@@ -124,7 +124,7 @@
     </div>
 
     <script>
-        const API = 'http://10.1.1.129:5000';
+        const API = window.location.protocol + '//' + window.location.hostname + ':5000';
         const chat = document.getElementById('chat');
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send');

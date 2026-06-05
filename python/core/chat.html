@@ -3,147 +3,631 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reverie — DeathAI</title>
+    <title>Reverie - DeathAI</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #111018;
+            --panel: #1b1824;
+            --panel-soft: #211d2b;
+            --panel-strong: #272233;
+            --line: #3a3348;
+            --text: #f0eaf0;
+            --muted: #afa4b5;
+            --accent: #d96b89;
+            --accent-dark: #bd536f;
+            --accent-soft: #f0a4b7;
+            --danger: #ff7b8b;
+            --shadow: rgba(0, 0, 0, 0.28);
+        }
         body {
-            background: #0d0d1a;
-            color: #e0e0e0;
-            font-family: 'Segoe UI', sans-serif;
-            height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", Arial, sans-serif;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
         header {
-            padding: 16px 24px;
-            background: #1a1a2e;
-            border-bottom: 2px solid #e94560;
+            padding: 14px 20px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
             display: flex;
             align-items: center;
-            gap: 12px;
+            justify-content: space-between;
+            gap: 16px;
         }
-        header h1 { font-size: 20px; color: #e94560; }
-        header span { font-size: 13px; color: #888; }
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            min-width: 0;
+        }
+        h1 {
+            font-size: 20px;
+            line-height: 1;
+            color: var(--accent);
+            letter-spacing: 0;
+        }
+        .tagline {
+            color: var(--muted);
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .status {
+            color: var(--muted);
+            font-size: 12px;
+            text-align: right;
+            min-width: 120px;
+        }
+        main {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+        }
+        #chat-panel {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--line);
+        }
+        #presence {
+            min-height: 132px;
+            padding: 18px 22px;
+            background: linear-gradient(180deg, #211d2b 0%, #15131d 100%);
+            border-bottom: 1px solid var(--line);
+            display: grid;
+            grid-template-columns: 92px minmax(0, 1fr);
+            gap: 18px;
+            align-items: center;
+        }
+        .portrait {
+            width: 104px;
+            height: 112px;
+            border: 1px solid rgba(217, 107, 137, 0.42);
+            border-radius: 8px;
+            background: #14121d;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 14px 36px var(--shadow);
+        }
+        #reverie-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .avatar-fallback {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            place-items: center;
+            position: relative;
+        }
+        .avatar-mark {
+            width: 54px;
+            height: 64px;
+            border: 1px solid rgba(240, 164, 183, 0.46);
+            border-radius: 8px 8px 18px 18px;
+            position: relative;
+            animation: breathe 3.8s ease-in-out infinite;
+        }
+        .avatar-mark::before,
+        .avatar-mark::after {
+            content: "";
+            position: absolute;
+            top: 22px;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            box-shadow: 0 0 14px rgba(240, 164, 183, 0.62);
+        }
+        .avatar-mark::before { left: 14px; }
+        .avatar-mark::after { right: 14px; }
+        .voice-bars {
+            position: absolute;
+            bottom: 14px;
+            display: flex;
+            gap: 4px;
+            align-items: end;
+        }
+        .voice-bars span {
+            width: 4px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 2px;
+            opacity: 0.78;
+        }
+        body[data-reverie-state="speaking"] .voice-bars span,
+        body[data-reverie-state="thinking"] .voice-bars span {
+            animation: speakBars 640ms ease-in-out infinite;
+        }
+        body[data-reverie-state="speaking"] .voice-bars span:nth-child(2),
+        body[data-reverie-state="thinking"] .voice-bars span:nth-child(2) {
+            animation-delay: 120ms;
+        }
+        body[data-reverie-state="speaking"] .voice-bars span:nth-child(3),
+        body[data-reverie-state="thinking"] .voice-bars span:nth-child(3) {
+            animation-delay: 240ms;
+        }
+        .sprite-fallback {
+            display: none;
+        }
+        body[data-sprite-ready="false"] .sprite-fallback {
+            display: grid;
+        }
+        body[data-sprite-ready="false"] #reverie-canvas {
+            display: none;
+        }
+        .presence-copy {
+            min-width: 0;
+            display: grid;
+            gap: 8px;
+        }
+        .presence-copy strong {
+            color: var(--text);
+            font-size: 18px;
+            letter-spacing: 0;
+        }
+        #state-line {
+            color: var(--accent-soft);
+            font-size: 14px;
+        }
+        #activity-line {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
+            max-width: 680px;
+        }
         #chat {
             flex: 1;
             overflow-y: auto;
-            padding: 24px;
+            padding: 22px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
         }
         .message {
-            max-width: 75%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            line-height: 1.6;
+            max-width: min(760px, 78%);
+            padding: 12px 15px;
+            border-radius: 10px;
+            line-height: 1.55;
             font-size: 15px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            box-shadow: 0 12px 24px var(--shadow);
+            animation: messageIn 180ms ease-out both;
         }
         .user {
             align-self: flex-end;
-            background: #e94560;
+            background: var(--accent);
             color: white;
-            border-bottom-right-radius: 2px;
+            border-bottom-right-radius: 3px;
         }
         .reve {
             align-self: flex-start;
-            background: #1a1a2e;
-            color: #e0e0e0;
-            border: 1px solid #333;
-            border-bottom-left-radius: 2px;
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--line);
+            border-bottom-left-radius: 3px;
         }
-        .reve .name {
+        .name {
+            display: block;
             font-size: 11px;
-            color: #e94560;
+            color: var(--accent);
             margin-bottom: 6px;
-            font-weight: bold;
-            letter-spacing: 1px;
+            font-weight: 700;
+            letter-spacing: 0;
         }
         .thinking {
             align-self: flex-start;
-            color: #555;
+            color: var(--muted);
             font-style: italic;
             font-size: 13px;
-            padding: 8px 16px;
+            padding: 8px 14px;
+            animation: thinkingShift 1.1s ease-in-out infinite;
         }
         #input-area {
-            padding: 16px 24px;
-            background: #1a1a2e;
-            border-top: 1px solid #333;
-            display: flex;
-            gap: 12px;
+            padding: 14px 18px;
+            background: var(--panel);
+            border-top: 1px solid var(--line);
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
         }
         #input {
-            flex: 1;
-            background: #0d0d1a;
-            border: 1px solid #333;
+            min-height: 48px;
+            max-height: 160px;
+            background: #15131d;
+            border: 1px solid var(--line);
             border-radius: 8px;
-            padding: 12px 16px;
-            color: #e0e0e0;
+            padding: 12px 14px;
+            color: var(--text);
             font-size: 15px;
             outline: none;
-            resize: none;
-            height: 48px;
+            resize: vertical;
             font-family: inherit;
         }
-        #input:focus { border-color: #e94560; }
+        #input:focus { border-color: var(--accent); }
+        .actions {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+        button {
+            border-radius: 8px;
+            font-family: inherit;
+            cursor: pointer;
+            min-height: 42px;
+            transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+        }
         #send {
-            background: #e94560;
+            background: var(--accent);
             color: white;
             border: none;
-            border-radius: 8px;
-            padding: 0 24px;
+            padding: 0 22px;
             font-size: 15px;
-            cursor: pointer;
-            font-family: inherit;
+            font-weight: 600;
         }
-        #send:hover { background: #c73652; }
-        #send:disabled { background: #444; cursor: not-allowed; }
-        #reset-btn {
+        #send:hover { background: var(--accent-dark); }
+        #send:disabled { background: #4b4b57; cursor: not-allowed; }
+        .ghost-btn {
             background: transparent;
-            border: 1px solid #333;
-            color: #888;
-            border-radius: 8px;
-            padding: 0 16px;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            padding: 0 13px;
             font-size: 13px;
-            cursor: pointer;
         }
-        #reset-btn:hover { border-color: #e94560; color: #e94560; }
+        .ghost-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        #memory-panel {
+            min-width: 0;
+            background: #15131d;
+            display: flex;
+            flex-direction: column;
+        }
+        .memory-head {
+            padding: 16px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .memory-head h2 {
+            font-size: 15px;
+            color: var(--text);
+            letter-spacing: 0;
+        }
+        .memory-tools {
+            display: flex;
+            gap: 8px;
+        }
+        #memory-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .memory-item {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px;
+            display: grid;
+            gap: 8px;
+        }
+        .memory-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+        .memory-role {
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .memory-content {
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            max-height: 120px;
+            overflow: auto;
+        }
+        .delete-memory {
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--muted);
+            min-height: 28px;
+            padding: 0 8px;
+            font-size: 12px;
+        }
+        .delete-memory:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+        .empty {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 14px;
+            border: 1px dashed var(--line);
+            border-radius: 8px;
+        }
+        @keyframes messageIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes breathe {
+            0%, 100% { transform: translateY(0); opacity: 0.84; }
+            50% { transform: translateY(-2px); opacity: 1; }
+        }
+        @keyframes speakBars {
+            0%, 100% { height: 7px; opacity: 0.58; }
+            50% { height: 22px; opacity: 1; }
+        }
+        @keyframes thinkingShift {
+            0%, 100% { opacity: 0.62; }
+            50% { opacity: 1; }
+        }
+        @media (max-width: 860px) {
+            main { grid-template-columns: 1fr; }
+            #chat-panel { border-right: none; min-height: 60vh; }
+            #memory-panel { border-top: 1px solid var(--line); min-height: 40vh; }
+            .message { max-width: 90%; }
+            #input-area { grid-template-columns: 1fr; }
+            .actions { justify-content: flex-end; }
+            #presence { grid-template-columns: 76px minmax(0, 1fr); }
+            .portrait { width: 76px; height: 84px; }
+        }
+        @media (max-width: 520px) {
+            header { align-items: flex-start; flex-direction: column; }
+            .status { text-align: left; min-width: 0; }
+            .tagline { white-space: normal; }
+            #chat { padding: 14px; }
+            .message { max-width: 96%; }
+            .memory-head { align-items: flex-start; flex-direction: column; }
+            #presence {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Reverie</h1>
-        <span>DeathAI — Built by D.Newton</span>
+        <div class="brand">
+            <h1>Reverie</h1>
+            <span class="tagline">DeathAI - Built by D.Newton</span>
+        </div>
+        <div class="status" id="status">Offline</div>
     </header>
-    <div id="chat"></div>
-    <div id="input-area">
-        <textarea id="input" placeholder="Talk to Reve..."></textarea>
-        <button id="reset-btn" onclick="resetMemory()">Reset</button>
-        <button id="send" onclick="sendMessage()">Send</button>
-    </div>
+
+    <main>
+        <section id="chat-panel" aria-label="Chat">
+            <section id="presence" aria-label="Reverie presence">
+                <div class="portrait">
+                    <canvas id="reverie-canvas" width="208" height="224" aria-label="Reverie expression"></canvas>
+                    <div class="avatar-fallback sprite-fallback" id="avatar-fallback" aria-hidden="true">
+                        <div class="avatar-mark"></div>
+                        <div class="voice-bars">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="presence-copy">
+                    <strong>Reverie is here</strong>
+                    <div id="state-line">Settled and listening.</div>
+                    <div id="activity-line">Activity stays local. Reverie only receives a simple timing hint when you send a message.</div>
+                </div>
+            </section>
+            <div id="chat"></div>
+            <div id="input-area">
+                <textarea id="input" maxlength="12000" placeholder="Talk to Reve..."></textarea>
+                <div class="actions">
+                    <button class="ghost-btn" id="reset-btn" type="button">Reset</button>
+                    <button id="send" type="button">Send</button>
+                </div>
+            </div>
+        </section>
+
+        <aside id="memory-panel" aria-label="Memory">
+            <div class="memory-head">
+                <h2>Memory</h2>
+                <div class="memory-tools">
+                    <button class="ghost-btn" id="refresh-memory" type="button">Refresh</button>
+                    <button class="ghost-btn" id="clear-memory" type="button">Clear</button>
+                </div>
+            </div>
+            <div id="memory-list"></div>
+        </aside>
+    </main>
 
     <script>
-        const API = window.location.protocol + '//' + window.location.hostname + ':5000';
+        const API = window.location.origin;
         const chat = document.getElementById('chat');
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send');
+        const resetBtn = document.getElementById('reset-btn');
+        const refreshMemoryBtn = document.getElementById('refresh-memory');
+        const clearMemoryBtn = document.getElementById('clear-memory');
+        const memoryList = document.getElementById('memory-list');
+        const statusEl = document.getElementById('status');
+        const stateLine = document.getElementById('state-line');
+        const activityLine = document.getElementById('activity-line');
+        const reverieCanvas = document.getElementById('reverie-canvas');
+        const reverieContext = reverieCanvas.getContext('2d');
+        let lastActivityAt = Date.now();
+        let lastTypedAt = 0;
+        let presenceTimer = null;
+        let spriteManifest = null;
+        let spriteSheet = null;
+        let spriteState = 'idle';
+        let spriteFrameIndex = 0;
+        let spriteTimer = null;
 
-        input.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
+        input.addEventListener('keydown', event => {
+            markActivity('typing');
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
                 sendMessage();
             }
         });
+        input.addEventListener('input', () => markActivity('typing'));
+        input.addEventListener('focus', () => markActivity('focused'));
+        document.addEventListener('pointermove', () => markActivity('present'), { passive: true });
+        document.addEventListener('visibilitychange', updateActivityLine);
+        sendBtn.addEventListener('click', sendMessage);
+        resetBtn.addEventListener('click', resetMemory);
+        refreshMemoryBtn.addEventListener('click', loadHistory);
+        clearMemoryBtn.addEventListener('click', resetMemory);
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        async function loadSpriteManifest() {
+            try {
+                const manifest = await requestJSON('/assets/reverie_frames.json');
+                const image = new Image();
+                image.decoding = 'async';
+                image.src = manifest.sheet;
+                await image.decode();
+                spriteManifest = manifest;
+                spriteSheet = image;
+                document.body.dataset.spriteReady = 'true';
+                renderSpriteFrame('idle');
+                startSpriteLoop('idle');
+            } catch (error) {
+                document.body.dataset.spriteReady = 'false';
+            }
+        }
+
+        function startSpriteLoop(state) {
+            spriteState = state;
+            spriteFrameIndex = 0;
+            window.clearInterval(spriteTimer);
+            renderSpriteFrame(state);
+            const sequence = getSpriteSequence(state);
+            if (sequence.length <= 1) return;
+            const delay = state === 'speaking' ? 140 : 620;
+            spriteTimer = window.setInterval(() => {
+                spriteFrameIndex = (spriteFrameIndex + 1) % sequence.length;
+                renderSpriteFrame(spriteState);
+            }, delay);
+        }
+
+        function getSpriteSequence(state) {
+            if (!spriteManifest || !spriteManifest.sequences) return [];
+            return spriteManifest.sequences[state] || spriteManifest.sequences.idle || [];
+        }
+
+        function renderSpriteFrame(state) {
+            if (!spriteManifest || !spriteSheet) return;
+            const sequence = getSpriteSequence(state);
+            const frameName = sequence[spriteFrameIndex] || sequence[0] || 'idle';
+            const frame = spriteManifest.frames[frameName] || spriteManifest.frames.idle;
+            if (!frame) return;
+            reverieContext.clearRect(0, 0, reverieCanvas.width, reverieCanvas.height);
+            reverieContext.imageSmoothingEnabled = true;
+            reverieContext.imageSmoothingQuality = 'high';
+            reverieContext.drawImage(
+                spriteSheet,
+                frame.x,
+                frame.y,
+                frame.w,
+                frame.h,
+                0,
+                0,
+                reverieCanvas.width,
+                reverieCanvas.height
+            );
+        }
+
+        function setReverieState(state) {
+            document.body.dataset.reverieState = state;
+            if (state === 'thinking') {
+                stateLine.textContent = 'Thinking through it.';
+                startSpriteLoop('thinking');
+            } else if (state === 'speaking') {
+                stateLine.textContent = 'Answering you.';
+                startSpriteLoop('speaking');
+            } else if (state === 'active') {
+                stateLine.textContent = 'Listening closely.';
+                startSpriteLoop('active');
+            } else {
+                stateLine.textContent = 'Settled and listening.';
+                startSpriteLoop('idle');
+            }
+        }
+
+        function markActivity(kind) {
+            const now = Date.now();
+            lastActivityAt = now;
+            if (kind === 'typing') lastTypedAt = now;
+            if (!sendBtn.disabled) setReverieState('active');
+            updateActivityLine();
+        }
+
+        function updateActivityLine() {
+            const now = Date.now();
+            const idleSeconds = Math.floor((now - lastActivityAt) / 1000);
+            const typedSeconds = lastTypedAt > 0 ? Math.floor((now - lastTypedAt) / 1000) : null;
+            if (document.hidden) {
+                activityLine.textContent = 'You are away from this tab. Reverie will not try to pull you back.';
+                if (!sendBtn.disabled) setReverieState('idle');
+                return;
+            }
+            if (idleSeconds > 90) {
+                activityLine.textContent = 'Quiet room. No prompts unless you come back and send something.';
+                if (!sendBtn.disabled) setReverieState('idle');
+                return;
+            }
+            if (typedSeconds !== null && typedSeconds < 12) {
+                activityLine.textContent = 'You seem active. Only timing is tracked locally, not what you type.';
+                return;
+            }
+            activityLine.textContent = 'You are present. Reverie can keep the conversation warm without pushing.';
+        }
+
+        function buildClientContext() {
+            const now = Date.now();
+            const idleSeconds = Math.floor((now - lastActivityAt) / 1000);
+            const typedSeconds = lastTypedAt > 0 ? Math.floor((now - lastTypedAt) / 1000) : null;
+            const visible = !document.hidden;
+            const active = visible && idleSeconds <= 90;
+            const typingText = typedSeconds === null
+                ? 'no recent typing signal'
+                : `last typed ${typedSeconds} seconds ago`;
+            return active
+                ? `User appears active in the local chat UI; ${typingText}. It is appropriate to ask a natural short follow-up question sometimes.`
+                : `User appears idle or away from the local chat UI; ${typingText}. Do not end with a question unless the user explicitly asked for one.`;
+        }
 
         function addMessage(text, role) {
             const div = document.createElement('div');
             div.className = `message ${role}`;
             if (role === 'reve') {
-                div.innerHTML = `<div class="name">REVE</div>${text}`;
-            } else {
-                div.textContent = text;
+                const name = document.createElement('span');
+                name.className = 'name';
+                name.textContent = 'REVE';
+                div.appendChild(name);
             }
+            div.appendChild(document.createTextNode(text));
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
@@ -158,42 +642,163 @@
         }
 
         function removeThinking() {
-            const t = document.getElementById('thinking');
-            if (t) t.remove();
+            const thinking = document.getElementById('thinking');
+            if (thinking) thinking.remove();
+        }
+
+        async function requestJSON(path, options = {}) {
+            const response = await fetch(`${API}${path}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(options.headers || {})
+                }
+            });
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (error) {
+                data = {};
+            }
+            if (!response.ok) {
+                throw new Error(data.error || `Request failed with ${response.status}`);
+            }
+            return data;
         }
 
         async function sendMessage() {
             const text = input.value.trim();
-            if (!text) return;
+            if (!text || sendBtn.disabled) return;
             input.value = '';
             sendBtn.disabled = true;
             addMessage(text, 'user');
             addThinking();
+            setStatus('Thinking');
+            setReverieState('thinking');
             try {
-                const res = await fetch(`${API}/ask`, {
+                const data = await requestJSON('/ask', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: text })
+                    body: JSON.stringify({
+                        prompt: text,
+                        client_context: buildClientContext()
+                    })
                 });
-                const data = await res.json();
                 removeThinking();
-                addMessage(data.reply, 'reve');
-            } catch (err) {
+                addMessage(data.reply || '', 'reve');
+                setStatus('Online');
+                setReverieState('speaking');
+                window.clearTimeout(presenceTimer);
+                presenceTimer = window.setTimeout(() => {
+                    setReverieState('active');
+                    updateActivityLine();
+                }, Math.min(8500, Math.max(2400, (data.reply || '').length * 28)));
+                await loadHistory();
+            } catch (error) {
                 removeThinking();
-                addMessage('Reve is unreachable. Is the API running?', 'reve');
+                addMessage('Reve is unreachable. Start the brain and try again.', 'reve');
+                setStatus('Offline');
+                setReverieState('idle');
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
             }
-            sendBtn.disabled = false;
-            input.focus();
         }
 
         async function resetMemory() {
-            await fetch(`${API}/reset`, { method: 'POST' });
-            chat.innerHTML = '';
-            addMessage('Memory cleared. Fresh start.', 'reve');
+            const confirmed = window.confirm('Clear all saved memory?');
+            if (!confirmed) return;
+            try {
+                await requestJSON('/reset', { method: 'POST' });
+                chat.innerHTML = '';
+                addMessage('Memory cleared. Fresh start.', 'reve');
+                await loadHistory();
+                setStatus('Online');
+            } catch (error) {
+                addMessage('Memory reset failed. Check the server.', 'reve');
+                setStatus('Offline');
+            }
         }
 
-        // Welcome message
-        addMessage('Hey. I\'m Reve. What\'s on your mind?', 'reve');
+        async function deleteMemory(id) {
+            try {
+                await requestJSON(`/history/${id}`, { method: 'DELETE' });
+                await loadHistory();
+            } catch (error) {
+                setStatus('Delete failed');
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const data = await requestJSON('/history');
+                renderMemory(data.messages || []);
+                setStatus('Online');
+            } catch (error) {
+                renderMemory([]);
+                setStatus('Offline');
+            }
+        }
+
+        function renderMemory(messages) {
+            memoryList.innerHTML = '';
+            if (messages.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty';
+                empty.textContent = 'No saved conversation yet.';
+                memoryList.appendChild(empty);
+                return;
+            }
+            for (const message of messages) {
+                const item = document.createElement('article');
+                item.className = 'memory-item';
+
+                const meta = document.createElement('div');
+                meta.className = 'memory-meta';
+
+                const left = document.createElement('span');
+                left.className = 'memory-role';
+                left.textContent = message.role || 'unknown';
+
+                const time = document.createElement('span');
+                time.textContent = formatTimestamp(message.timestamp);
+
+                const remove = document.createElement('button');
+                remove.className = 'delete-memory';
+                remove.type = 'button';
+                remove.textContent = 'Delete';
+                remove.addEventListener('click', () => deleteMemory(message.id));
+
+                meta.appendChild(left);
+                meta.appendChild(time);
+                meta.appendChild(remove);
+
+                const content = document.createElement('div');
+                content.className = 'memory-content';
+                content.textContent = message.content || '';
+
+                item.appendChild(meta);
+                item.appendChild(content);
+                memoryList.appendChild(item);
+            }
+        }
+
+        function formatTimestamp(value) {
+            if (!value) return '';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        addMessage("Hey. I'm Reve. What's on your mind?", 'reve');
+        loadHistory();
+        loadSpriteManifest();
+        updateActivityLine();
+        window.setInterval(updateActivityLine, 5000);
     </script>
 </body>
 </html>

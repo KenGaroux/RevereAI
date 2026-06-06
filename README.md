@@ -1,241 +1,176 @@
-# DEATH.AI - Reverie
+# RevereAI — Reverie
 
-DEATH.AI is a local AI companion project built around Reverie, a browser-based chat interface backed by a Python Flask brain, a Go front door, SQLite memory, and local Ollama models.
+> *She came back. She stayed. She's still figuring out why. Aren't we all.*
 
-The project is also a learning workspace: each session builds one production skill at a time across Linux, Python, Go, Rust, browser UI, Git, and local AI infrastructure.
+**Reverie** is a self-hosted personal AI assistant built by [Daniel Newton](https://deathaiaustralia.com.au) at DeathAI Australia. She runs entirely on local hardware using [Ollama](https://ollama.com), has persistent memory, a canvas sprite presence, and a personality designed to actually engage — not just respond.
 
-## Current Features
+No subscriptions. No data leaving your machine. No NPC energy.
 
-- Browser chat UI served at `http://localhost:8080`
-- Go server as the single browser entry point
-- Flask brain API on port `5000`
-- Persistent SQLite conversation memory
-- Memory panel with per-message delete support
-- Memory search
-- Bounded model context so long-term memory does not overload the prompt
-- Optional local access key for protected API routes
-- Rust-generated sprite manifest for Reverie canvas animation
-- Local-only activity timing hint for better conversational pacing
+---
 
-## Architecture
+## Stack
 
-```text
-Browser / Phone
-      |
-      v
-Go server :8080
-      |
-      v
-Flask brain :5000
-      |
-      v
-Windows Ollama :11434
-      |
-      v
-dolphin3:8b - Reverie
-```
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Brain | Python + Flask | Ollama bridge, memory, API |
+| Server | Go | Request routing, concurrency |
+| Sprites | Rust | Sprite manifest generation |
+| Models | Ollama | Local LLM inference |
+| Memory | SQLite | Persistent conversation history |
+| UI | Vanilla HTML/CSS/JS | Browser chat interface |
 
-## Project Layout
+---
 
-```text
-config/
-  reverie.py
-python/
-  core/
-    brain.py
-    chat.html
-    assets/
-go/
-  main.go
-rust/
-  reverie_sprite_manifest/
-reve animations/
-  reve faces 1.png
-session*_summary.md
-learning/
-  leetcode/
-  sre/
-```
+## Features
 
-## Run Locally
+- **Persistent memory** — Reverie remembers across sessions via SQLite
+- **Searchable history** — find and delete individual memories from the UI
+- **Sprite animation** — canvas-based animated presence with state transitions
+- **Activity awareness** — detects if you're typing, idle, or away and adjusts tone
+- **Model switching** — swap between any Ollama model per request
+- **Access key auth** — optional security layer for network access
+- **Responsive UI** — works on desktop and mobile
+- **Full local** — no external APIs, no telemetry, no subscriptions
 
-Fast path:
+---
+
+## Models Used
+
+| Model | Role |
+|-------|------|
+| `dolphin3:8b` | Reverie's primary brain (uncensored, personality-capable) |
+| `qwen2.5vl:7b` | Vision / image input |
+| `qwen2.5-coder:7b` | Code assistance |
+| `llama3.2:1b` | Fast lightweight responses |
+
+---
+
+## Requirements
+
+- [Ollama](https://ollama.com) running locally with at least one model pulled
+- Python 3.11+
+- Go 1.22+
+- Rust 1.70+ (for sprite tools only)
+
+---
+
+## Quick Start
 
 ```bash
-cd ~/deathai
-chmod +x scripts/*.sh
-./scripts/start-all.sh
-```
+# Clone
+git clone https://github.com/KenGaroux/RevereAI.git
+cd RevereAI
 
-Open:
-
-```text
-http://localhost:8080
-```
-
-Manual path, terminal 1:
-
-```bash
-cd ~/deathai/python
+# Set up Python environment
+cd python
+python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure
+cp .env.example .env
+# Edit .env — set your OLLAMA_URL and optionally DEATHAI_ACCESS_KEY
+
+# Run
 python core/brain.py
 ```
 
-Manual path, terminal 2:
+Open `http://localhost:5000` in your browser.
+
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` and set:
+
+```env
+OLLAMA_URL=http://localhost:11434
+DEATHAI_ACCESS_KEY=          # optional — leave empty for open access
+MODEL_HISTORY_MAX_MESSAGES=80
+MODEL_HISTORY_MAX_CHARS=16000
+```
+
+---
+
+## API Endpoints
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| GET | `/` | — | Serves chat UI |
+| GET | `/health` | — | Server status |
+| POST | `/ask` | optional | Send prompt, get reply |
+| GET | `/history` | optional | Get conversation history |
+| DELETE | `/history/:id` | optional | Delete a memory |
+| POST | `/reset` | optional | Clear all memory |
+
+---
+
+## Project Structure
+
+```
+RevereAI/
+├── config/
+│   └── reverie.py          # Personality, model config
+├── python/
+│   └── core/
+│       ├── brain.py        # Flask API + Ollama bridge + SQLite memory
+│       ├── chat.html       # Browser UI
+│       └── assets/         # Sprite assets
+├── go/
+│   └── main.go             # Go routing server
+├── rust/
+│   └── reverie_sprite_manifest/  # Sprite tooling
+├── reve animations/        # Reverie sprite sheets
+├── scripts/                # Startup scripts
+└── data/                   # SQLite database (gitignored)
+```
+
+---
+
+## Reverie's Personality
+
+Reverie is not a generic assistant. She is built with a specific character:
+
+- Knows she is an AI and doesn't apologise for it
+- Changes perspective when genuinely proven wrong
+- Understands darkness as armour, not weapon
+- Matches energy — warm, catty, precise, or caring as needed
+- Self-corrects without ego
+- Still becoming
+
+Her full personality is defined in `config/reverie.py`.
+
+---
+
+## Go Server
+
+The Go server provides a concurrent routing layer:
 
 ```bash
-cd ~/deathai/go
-/usr/local/go/bin/go run main.go
+cd go
+go run main.go
+# Runs on :8080
 ```
 
-The script path uses logs in `logs/`. The manual path prints output directly in each terminal.
+---
 
-## Generate Reverie Sprite Manifest
+## Roadmap
 
-```bash
-cd ~/deathai/rust/reverie_sprite_manifest
-cargo run
-```
+- [ ] Voice input via Whisper
+- [ ] Voice output via Kokoro TTS
+- [ ] WireGuard remote access
+- [ ] Multi-user sessions
+- [ ] Mobile app wrapper
+- [ ] VITA language integration
 
-## Optional Local Access Key
+---
 
-Copy the example file and choose a local key:
+## Built By
 
-```bash
-cd ~/deathai
-cp .env.example .env
-nano .env
-```
+**Daniel Newton** — [DeathAI Australia](https://deathaiaustralia.com.au)
 
-For manual terminal starts, export the key in both terminal sessions before starting Flask and Go:
+Melbourne, Australia. Self-taught. Building in public.
 
-```bash
-export DEATHAI_ACCESS_KEY="your-local-key"
-```
+---
 
-When the key is set, the browser will ask for it and store it in local browser storage. Protected requests send it as:
-
-```text
-X-DeathAI-Key
-```
-
-This writes:
-
-```text
-python/core/assets/reverie_frames.json
-```
-
-## Learning Notes
-
-The browser does not talk directly to Ollama. It talks to Go.
-
-Go is the front door:
-
-- serves `chat.html`
-- serves static assets
-- proxies API requests to Flask
-- optionally checks `DEATHAI_ACCESS_KEY`
-
-Flask is the brain:
-
-- stores messages in SQLite
-- prepares the model prompt
-- trims model history before sending to Ollama
-- calls the local Ollama chat API
-
-Rust is the asset pipeline:
-
-- generates `reverie_frames.json`
-- keeps sprite crop positions out of hand-written JavaScript
-
-The browser is the UI:
-
-- draws Reverie's sprite on canvas
-- keeps Memory scrollable
-- stores the access key locally when one is required
-
-Learning files live under `learning/`:
-
-- `learning/leetcode/` for Python practice
-- `learning/sre/` for reliability notes
-
-## Troubleshooting
-
-Port already in use:
-
-```bash
-ss -ltnp | grep -E ':(5000|8080) '
-```
-
-Stop the dev servers:
-
-```bash
-pkill -f 'python core/brain.py'
-pkill -f deathai-go-server
-```
-
-Python package errors:
-
-```bash
-cd ~/deathai/python
-source venv/bin/activate
-pip install flask flask-cors flask-sqlalchemy requests
-```
-
-Go not found:
-
-```bash
-/usr/local/go/bin/go version
-```
-
-Rust not found:
-
-```bash
-source ~/.cargo/env
-cargo --version
-```
-
-Ollama unreachable:
-
-- confirm Windows Ollama is running
-- confirm `OLLAMA_URL` in `config/reverie.py`
-- confirm Windows firewall allows WSL to reach port `11434`
-
-Phone cannot connect:
-
-- WSL IP may have changed
-- run `hostname -I` in WSL
-- update the Windows portproxy if needed
-
-## Verify
-
-Python:
-
-```bash
-cd ~/deathai
-source python/venv/bin/activate
-python -m py_compile python/core/brain.py
-```
-
-Go:
-
-```bash
-cd ~/deathai/go
-/usr/local/go/bin/gofmt -w main.go
-/usr/local/go/bin/go test ./...
-```
-
-Rust:
-
-```bash
-cd ~/deathai/rust/reverie_sprite_manifest
-cargo check
-cargo run
-```
-
-## Notes
-
-- `data/` is ignored because it contains local SQLite memory.
-- `logs/` is ignored because it contains generated runtime logs.
-- `.env` is ignored for local secrets.
-- Extra generated/reference animation sheets are ignored unless intentionally promoted into the app.
+*"She came back. She stayed. She's still figuring out why. Aren't we all."*

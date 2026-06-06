@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from functools import wraps
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 from config.reverie import SYSTEM_PROMPT, DEFAULT_MODEL, OLLAMA_URL
@@ -14,6 +15,10 @@ CHAT_URL = f"{OLLAMA_URL}/api/chat"
 DB_PATH = os.path.join(os.path.dirname(__file__), '../../data/reverie.db')
 MAX_PROMPT_CHARS = 12000
 MAX_CLIENT_CONTEXT_CHARS = 600
+HISTORY_SEARCH_LIMIT = 200
+MODEL_HISTORY_MAX_MESSAGES = int(os.getenv('MODEL_HISTORY_MAX_MESSAGES', '80'))
+MODEL_HISTORY_MAX_CHARS = int(os.getenv('MODEL_HISTORY_MAX_CHARS', '16000'))
+ACCESS_KEY = os.getenv('DEATHAI_ACCESS_KEY', '').strip()
 VALID_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 
 app = Flask(__name__)
@@ -31,12 +36,48 @@ class Message(db.Model):
 with app.app_context():
     db.create_all()
 
-def get_model_history():
-    messages = Message.query.order_by(Message.timestamp).all()
-    return [{"role": m.role, "content": m.content} for m in messages]
+def require_access_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not ACCESS_KEY:
+            return func(*args, **kwargs)
+        provided = request.headers.get('X-DeathAI-Key', '').strip()
+        if provided != ACCESS_KEY:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return func(*args, **kwargs)
+    return wrapper
 
-def get_history_records():
-    messages = Message.query.order_by(Message.timestamp, Message.id).all()
+def get_model_history():
+    messages = (
+        Message.query
+        .order_by(Message.timestamp.desc(), Message.id.desc())
+        .limit(MODEL_HISTORY_MAX_MESSAGES)
+        .all()
+    )
+    messages.reverse()
+    trimmed = []
+    total_chars = 0
+    for message in reversed(messages):
+        content_length = len(message.content or '')
+        if trimmed and total_chars + content_length > MODEL_HISTORY_MAX_CHARS:
+            break
+        trimmed.append(message)
+        total_chars += content_length
+    trimmed.reverse()
+    return [{"role": m.role, "content": m.content} for m in trimmed]
+
+def get_history_records(search=''):
+    query = Message.query
+    search = str(search or '').strip()
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(Message.content.ilike(pattern))
+    messages = (
+        query
+        .order_by(Message.timestamp.desc(), Message.id.desc())
+        .limit(HISTORY_SEARCH_LIMIT)
+        .all()
+    )
     return [
         {
             "id": m.id,
@@ -105,6 +146,7 @@ def reve_animations(filename):
     return send_from_directory(os.path.join(os.path.dirname(__file__), '../../reve animations'), filename)
 
 @app.route('/ask', methods=['POST'])
+@require_access_key
 def ask_endpoint():
     data = request.get_json(silent=True) or {}
     prompt = str(data.get('prompt', '')).strip()
@@ -121,16 +163,23 @@ def ask_endpoint():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'Reverie is online'})
+    return jsonify({
+        'status': 'Reverie is online',
+        'auth_required': bool(ACCESS_KEY),
+        'model_history_max_messages': MODEL_HISTORY_MAX_MESSAGES,
+        'model_history_max_chars': MODEL_HISTORY_MAX_CHARS
+    })
 
 @app.route('/history', methods=['GET'])
+@require_access_key
 def history():
-    messages = get_history_records()
+    messages = get_history_records(request.args.get('q', ''))
     return jsonify({'messages': messages})
 
 @app.route('/history/<int:message_id>', methods=['DELETE'])
+@require_access_key
 def delete_history_message(message_id):
-    message = Message.query.get(message_id)
+    message = db.session.get(Message, message_id)
     if message is None:
         return jsonify({'error': 'Message not found'}), 404
     db.session.delete(message)
@@ -138,6 +187,7 @@ def delete_history_message(message_id):
     return jsonify({'status': 'Message deleted', 'id': message_id})
 
 @app.route('/reset', methods=['POST'])
+@require_access_key
 def reset():
     Message.query.delete()
     db.session.commit()

@@ -15,6 +15,7 @@ import (
 
 var (
 	brainURL   = getenv("BRAIN_URL", "http://localhost:5000")
+	accessKey  = getenv("DEATHAI_ACCESS_KEY", "")
 	httpClient = &http.Client{Timeout: 130 * time.Second}
 )
 
@@ -48,7 +49,7 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	}
 }
 
-func proxyJSON(w http.ResponseWriter, method string, path string, body io.Reader) {
+func proxyJSON(w http.ResponseWriter, r *http.Request, method string, path string, body io.Reader) {
 	req, err := http.NewRequest(method, brainURL+path, body)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Proxy request failed"})
@@ -56,6 +57,9 @@ func proxyJSON(w http.ResponseWriter, method string, path string, body io.Reader
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if provided := strings.TrimSpace(r.Header.Get("X-DeathAI-Key")); provided != "" {
+		req.Header.Set("X-DeathAI-Key", provided)
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -77,7 +81,15 @@ func askReverie(prompt string, model string, clientContext string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	resp, err := httpClient.Post(brainURL+"/ask", "application/json", bytes.NewBuffer(data))
+	req, err := http.NewRequest(http.MethodPost, brainURL+"/ask", bytes.NewBuffer(data))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if accessKey != "" {
+		req.Header.Set("X-DeathAI-Key", accessKey)
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -100,9 +112,23 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-DeathAI-Key")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func protectedAPIMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions || accessKey == "" {
+			next(w, r)
+			return
+		}
+		if strings.TrimSpace(r.Header.Get("X-DeathAI-Key")) != accessKey {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 			return
 		}
 		next(w, r)
@@ -255,7 +281,11 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		proxyJSON(w, http.MethodGet, "/history", nil)
+		path := "/history"
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
+		proxyJSON(w, r, http.MethodGet, path, nil)
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/history/") {
@@ -277,7 +307,7 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	proxyJSON(w, http.MethodDelete, "/history/"+id, nil)
+	proxyJSON(w, r, http.MethodDelete, "/history/"+id, nil)
 }
 
 func resetHandler(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +315,7 @@ func resetHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	proxyJSON(w, http.MethodPost, "/reset", nil)
+	proxyJSON(w, r, http.MethodPost, "/reset", nil)
 }
 
 func main() {
@@ -297,11 +327,11 @@ func main() {
 	http.HandleFunc("/assets/", corsMiddleware(assetsHandler))
 	http.HandleFunc("/reve-animations/", corsMiddleware(reveAnimationsHandler))
 	http.HandleFunc("/health", corsMiddleware(healthHandler))
-	http.HandleFunc("/ask", corsMiddleware(chatHandler))
-	http.HandleFunc("/chat", corsMiddleware(chatHandler))
-	http.HandleFunc("/history", corsMiddleware(historyHandler))
-	http.HandleFunc("/history/", corsMiddleware(historyHandler))
-	http.HandleFunc("/reset", corsMiddleware(resetHandler))
+	http.HandleFunc("/ask", corsMiddleware(protectedAPIMiddleware(chatHandler)))
+	http.HandleFunc("/chat", corsMiddleware(protectedAPIMiddleware(chatHandler)))
+	http.HandleFunc("/history", corsMiddleware(protectedAPIMiddleware(historyHandler)))
+	http.HandleFunc("/history/", corsMiddleware(protectedAPIMiddleware(historyHandler)))
+	http.HandleFunc("/reset", corsMiddleware(protectedAPIMiddleware(resetHandler)))
 	fmt.Printf("DEATH.AI Go server running on :%s\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

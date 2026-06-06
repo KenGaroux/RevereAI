@@ -1,1 +1,32 @@
+# Windows metadata streams
 *:Zone.Identifier
+
+# Python
+__pycache__/
+*.py[cod]
+python/venv/
+
+# Runtime data
+data/
+logs/
+*.log
+
+# Local secrets
+.env
+*.env
+
+# Rust build output
+target/
+rust/**/target/
+
+# Go build output
+go/deathai-go-server
+deathai-go-server
+
+# Local documents and large reference assets
+DEATHAI_Manual_v1.docx
+reve animations/Gemini_Generated_Image_*.png
+reve animations/Reve 1.png
+reve animations/reve2.png
+reve animations/reve_dance.png
+reve animations/revedance2.png

@@ -66,6 +66,19 @@
             text-align: right;
             min-width: 120px;
         }
+        #auth-btn {
+            background: transparent;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            border-radius: 8px;
+            min-height: 34px;
+            padding: 0 12px;
+            font-size: 12px;
+        }
+        #auth-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
         main {
             flex: 1;
             min-height: 0;
@@ -312,13 +325,29 @@
         .memory-title {
             min-width: 0;
             display: grid;
-            gap: 10px;
+            gap: 8px;
             flex: 1;
+        }
+        .memory-title-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
         }
         .memory-head h2 {
             font-size: 15px;
             color: var(--text);
             letter-spacing: 0;
+        }
+        #memory-count {
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .search-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
         #memory-search {
             width: 100%;
@@ -331,6 +360,10 @@
             outline: none;
             font-family: inherit;
             font-size: 13px;
+        }
+        #clear-search {
+            min-height: 36px;
+            padding: 0 10px;
         }
         #memory-search:focus {
             border-color: var(--accent);
@@ -398,6 +431,58 @@
             border: 1px dashed var(--line);
             border-radius: 8px;
         }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.58);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-backdrop.open {
+            display: flex;
+        }
+        .auth-modal {
+            width: min(420px, 100%);
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
+            padding: 18px;
+            display: grid;
+            gap: 14px;
+        }
+        .auth-modal h2 {
+            font-size: 18px;
+            color: var(--text);
+        }
+        .auth-modal p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        #access-key-input {
+            width: 100%;
+            background: #101018;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 11px 12px;
+            outline: none;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        #access-key-input:focus {
+            border-color: var(--accent);
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
         @keyframes messageIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
@@ -448,6 +533,7 @@
             <span class="tagline">DeathAI - Built by D.Newton</span>
         </div>
         <div class="status" id="status">Offline</div>
+        <button id="auth-btn" type="button">Access Key</button>
     </header>
 
     <main>
@@ -483,8 +569,14 @@
         <aside id="memory-panel" aria-label="Memory">
             <div class="memory-head">
                 <div class="memory-title">
-                    <h2>Memory</h2>
-                    <input id="memory-search" type="search" placeholder="Search memory">
+                    <div class="memory-title-row">
+                        <h2>Memory</h2>
+                        <span id="memory-count">0 memories</span>
+                    </div>
+                    <div class="search-row">
+                        <input id="memory-search" type="search" placeholder="Search memory">
+                        <button class="ghost-btn" id="clear-search" type="button">Clear</button>
+                    </div>
                 </div>
                 <div class="memory-tools">
                     <button class="ghost-btn" id="refresh-memory" type="button">Refresh</button>
@@ -495,6 +587,19 @@
         </aside>
     </main>
 
+    <div class="modal-backdrop" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <div class="auth-modal">
+            <h2 id="auth-title">Access Key</h2>
+            <p>If DEATH.AI is running with a local access key, enter it here. The key stays in this browser only.</p>
+            <input id="access-key-input" type="password" autocomplete="current-password" placeholder="DEATHAI_ACCESS_KEY">
+            <div class="modal-actions">
+                <button class="ghost-btn" id="clear-key" type="button">Forget Key</button>
+                <button class="ghost-btn" id="cancel-key" type="button">Cancel</button>
+                <button id="save-key" type="button">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API = window.location.origin;
         const chat = document.getElementById('chat');
@@ -504,8 +609,16 @@
         const refreshMemoryBtn = document.getElementById('refresh-memory');
         const clearMemoryBtn = document.getElementById('clear-memory');
         const memorySearch = document.getElementById('memory-search');
+        const clearSearchBtn = document.getElementById('clear-search');
+        const memoryCount = document.getElementById('memory-count');
         const memoryList = document.getElementById('memory-list');
         const statusEl = document.getElementById('status');
+        const authBtn = document.getElementById('auth-btn');
+        const authModal = document.getElementById('auth-modal');
+        const accessKeyInput = document.getElementById('access-key-input');
+        const saveKeyBtn = document.getElementById('save-key');
+        const cancelKeyBtn = document.getElementById('cancel-key');
+        const clearKeyBtn = document.getElementById('clear-key');
         const stateLine = document.getElementById('state-line');
         const activityLine = document.getElementById('activity-line');
         const reverieCanvas = document.getElementById('reverie-canvas');
@@ -535,6 +648,21 @@
         resetBtn.addEventListener('click', resetMemory);
         refreshMemoryBtn.addEventListener('click', loadHistory);
         clearMemoryBtn.addEventListener('click', resetMemory);
+        authBtn.addEventListener('click', () => openAuthModal());
+        saveKeyBtn.addEventListener('click', saveAccessKey);
+        cancelKeyBtn.addEventListener('click', closeAuthModal);
+        clearKeyBtn.addEventListener('click', clearAccessKey);
+        authModal.addEventListener('click', event => {
+            if (event.target === authModal) closeAuthModal();
+        });
+        accessKeyInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter') saveAccessKey();
+            if (event.key === 'Escape') closeAuthModal();
+        });
+        clearSearchBtn.addEventListener('click', () => {
+            memorySearch.value = '';
+            loadHistory();
+        });
         memorySearch.addEventListener('input', () => {
             window.clearTimeout(searchTimer);
             searchTimer = window.setTimeout(loadHistory, 220);
@@ -542,6 +670,33 @@
 
         function setStatus(text) {
             statusEl.textContent = text;
+        }
+
+        function openAuthModal() {
+            accessKeyInput.value = window.localStorage.getItem('deathai_access_key') || '';
+            authModal.classList.add('open');
+            accessKeyInput.focus();
+        }
+
+        function closeAuthModal() {
+            authModal.classList.remove('open');
+        }
+
+        function saveAccessKey() {
+            const key = accessKeyInput.value.trim();
+            if (key) {
+                window.localStorage.setItem('deathai_access_key', key);
+                setStatus('Key saved');
+            }
+            closeAuthModal();
+            loadHistory();
+        }
+
+        function clearAccessKey() {
+            window.localStorage.removeItem('deathai_access_key');
+            accessKeyInput.value = '';
+            setStatus('Key cleared');
+            closeAuthModal();
         }
 
         async function loadSpriteManifest() {
@@ -708,10 +863,7 @@
             }
             if (!response.ok) {
                 if (response.status === 401) {
-                    const key = window.prompt('Enter DEATH.AI access key');
-                    if (key) {
-                        window.localStorage.setItem('deathai_access_key', key.trim());
-                    }
+                    openAuthModal();
                 }
                 throw new Error(data.error || `Request failed with ${response.status}`);
             }
@@ -795,10 +947,12 @@
 
         function renderMemory(messages) {
             memoryList.innerHTML = '';
+            const query = memorySearch.value.trim();
+            memoryCount.textContent = `${messages.length} ${query ? 'matches' : 'memories'}`;
             if (messages.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'empty';
-                empty.textContent = 'No saved conversation yet.';
+                empty.textContent = query ? 'No matching memory found.' : 'No saved conversation yet.';
                 memoryList.appendChild(empty);
                 return;
             }

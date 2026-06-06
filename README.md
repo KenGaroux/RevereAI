@@ -52,23 +52,19 @@ rust/
 reve animations/
   reve faces 1.png
 session*_summary.md
+learning/
+  leetcode/
+  sre/
 ```
 
 ## Run Locally
 
-Start the Flask brain:
+Fast path:
 
 ```bash
-cd ~/deathai/python
-source venv/bin/activate
-python core/brain.py
-```
-
-Start the Go front door:
-
-```bash
-cd ~/deathai/go
-/usr/local/go/bin/go run main.go
+cd ~/deathai
+chmod +x scripts/*.sh
+./scripts/start-all.sh
 ```
 
 Open:
@@ -76,6 +72,23 @@ Open:
 ```text
 http://localhost:8080
 ```
+
+Manual path, terminal 1:
+
+```bash
+cd ~/deathai/python
+source venv/bin/activate
+python core/brain.py
+```
+
+Manual path, terminal 2:
+
+```bash
+cd ~/deathai/go
+/usr/local/go/bin/go run main.go
+```
+
+The script path uses logs in `logs/`. The manual path prints output directly in each terminal.
 
 ## Generate Reverie Sprite Manifest
 
@@ -111,6 +124,88 @@ This writes:
 ```text
 python/core/assets/reverie_frames.json
 ```
+
+## Learning Notes
+
+The browser does not talk directly to Ollama. It talks to Go.
+
+Go is the front door:
+
+- serves `chat.html`
+- serves static assets
+- proxies API requests to Flask
+- optionally checks `DEATHAI_ACCESS_KEY`
+
+Flask is the brain:
+
+- stores messages in SQLite
+- prepares the model prompt
+- trims model history before sending to Ollama
+- calls the local Ollama chat API
+
+Rust is the asset pipeline:
+
+- generates `reverie_frames.json`
+- keeps sprite crop positions out of hand-written JavaScript
+
+The browser is the UI:
+
+- draws Reverie's sprite on canvas
+- keeps Memory scrollable
+- stores the access key locally when one is required
+
+Learning files live under `learning/`:
+
+- `learning/leetcode/` for Python practice
+- `learning/sre/` for reliability notes
+
+## Troubleshooting
+
+Port already in use:
+
+```bash
+ss -ltnp | grep -E ':(5000|8080) '
+```
+
+Stop the dev servers:
+
+```bash
+pkill -f 'python core/brain.py'
+pkill -f deathai-go-server
+```
+
+Python package errors:
+
+```bash
+cd ~/deathai/python
+source venv/bin/activate
+pip install flask flask-cors flask-sqlalchemy requests
+```
+
+Go not found:
+
+```bash
+/usr/local/go/bin/go version
+```
+
+Rust not found:
+
+```bash
+source ~/.cargo/env
+cargo --version
+```
+
+Ollama unreachable:
+
+- confirm Windows Ollama is running
+- confirm `OLLAMA_URL` in `config/reverie.py`
+- confirm Windows firewall allows WSL to reach port `11434`
+
+Phone cannot connect:
+
+- WSL IP may have changed
+- run `hostname -I` in WSL
+- update the Windows portproxy if needed
 
 ## Verify
 

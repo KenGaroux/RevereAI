@@ -192,7 +192,10 @@ def ask_endpoint():
     # Check if this is a tool request first
     tool_result = detect_and_run_tool(prompt)
     if tool_result:
-        return jsonify({'reply': tool_result})
+        # Pass tool result back through Reverie so she responds naturally
+        tool_prompt = f"You just ran a tool for the user and got this result: {tool_result}. Tell the user what you did and share the actual results clearly but in your own voice. Be specific about what was found or done."
+        reply = ask(tool_prompt, model, client_context)
+        return jsonify({'reply': reply})
     
     reply = ask(prompt, model, client_context)
     return jsonify({'reply': reply})

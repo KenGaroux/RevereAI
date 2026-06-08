@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../"))
 from config.reverie import SYSTEM_PROMPT, DEFAULT_MODEL, OLLAMA_URL
 from tools.system_tools import TOOLS, TOOL_DEFINITIONS
+from tools.semantic_memory import get_relevant_memories
+
+# ─── Config ───────────────────────────────────────────────────────────────────
 
 CHAT_URL = f"{OLLAMA_URL}/api/chat"
 DB_PATH = os.path.join(os.path.dirname(__file__), "../../data/reverie.db")
@@ -23,6 +26,9 @@ MODEL_HISTORY_MAX_MESSAGES = int(os.getenv("MODEL_HISTORY_MAX_MESSAGES", "80"))
 MODEL_HISTORY_MAX_CHARS = int(os.getenv("MODEL_HISTORY_MAX_CHARS", "16000"))
 ACCESS_KEY = os.getenv("DEATHAI_ACCESS_KEY", "").strip()
 VALID_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+TOOL_ROUTER_MODEL = "llama3.2:1b"
+
+# ─── Flask + DB ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
 CORS(app)
@@ -39,6 +45,8 @@ class Message(db.Model):
 with app.app_context():
     db.create_all()
 
+# ─── Auth ─────────────────────────────────────────────────────────────────────
+
 def require_access_key(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -50,7 +58,9 @@ def require_access_key(func):
         return func(*args, **kwargs)
     return wrapper
 
-def get_model_history():
+# ─── Memory ───────────────────────────────────────────────────────────────────
+
+def get_all_history():
     messages = (
         Message.query
         .order_by(Message.timestamp.desc(), Message.id.desc())
@@ -99,7 +109,7 @@ def save_message(role, content):
     db.session.commit()
     return msg
 
-def build_transient_context(client_context):
+def build_client_context_message(client_context):
     context = str(client_context or "").strip()
     if not context:
         return []
@@ -107,81 +117,136 @@ def build_transient_context(client_context):
     return [{
         "role": "system",
         "content": (
-            "Current local UI presence hint. This is not saved memory. "
-            "Use it only to tune pacing: ask a short follow-up question sometimes "
-            "when the user is actively engaged; do not ask questions when the hint "
-            f"says they appear idle. Hint: {context}"
+            "Current local UI presence hint. Not saved memory. "
+            "Tune pacing only: ask a follow-up sometimes when user is active, "
+            f"don't push when idle. Hint: {context}"
         )
     }]
 
+# ─── Tools ────────────────────────────────────────────────────────────────────
+
 def call_tool(tool_name, params):
+    """Execute a tool by name with given params"""
     if tool_name not in TOOLS:
         return f"Unknown tool: {tool_name}"
     try:
-        func = TOOLS[tool_name]
-        return func(**params)
+        return TOOLS[tool_name](**params)
     except Exception as e:
         return f"Tool error: {e}"
 
-def ask_with_tools(prompt, model=DEFAULT_MODEL, client_context=None):
+def detect_tool_intent(prompt):
+    """
+    Use llama3.2:1b (fast/small) to detect if a tool should be called.
+    Returns (tool_name, params) or (None, None).
+    """
+    system = (
+        "You are a tool router. Analyse the user message.\n"
+        "If a computer action is needed, output ONLY valid JSON like:\n"
+        "{\"tool\": \"tool_name\", \"params\": {\"key\": \"value\"}}\n"
+        "If no tool is needed, output ONLY the word: NONE\n\n"
+        "Available tools:\n"
+        "- open_url: open a website. params: {\"url\": \"https://...\"}\n"
+        "- list_files: list files in a folder. params: {\"path\": \"~/some/path\"}\n"
+        "- read_file: read a file. params: {\"path\": \"~/file.txt\"}\n"
+        "- create_folder: create a folder. params: {\"path\": \"~/new/folder\"}\n"
+        "- run_command: run safe terminal command. params: {\"command\": \"ls -la\"}\n"
+        "- web_search: search the web. params: {\"query\": \"search terms\"}\n"
+        "- play_music: play a music file. params: {\"path\": \"~/music/file.mp3\"}\n"
+    )
+
+    try:
+        response = requests.post(CHAT_URL, json={
+            "model": TOOL_ROUTER_MODEL,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt}
+            ],
+            "stream": False
+        }, timeout=15)
+        response.raise_for_status()
+        reply = response.json()["message"]["content"].strip()
+
+        if reply.upper() == "NONE" or not reply.startswith("{"):
+            return None, None
+
+        data = json.loads(reply)
+        tool_name = data.get("tool") or data.get("tool_call")
+        params = data.get("params", {})
+
+        if tool_name and tool_name in TOOLS:
+            return tool_name, params
+
+    except Exception:
+        pass
+
+    return None, None
+
+# ─── Core ask function ────────────────────────────────────────────────────────
+
+def ask(prompt, model=DEFAULT_MODEL, client_context=None):
+    """
+    Main ask function:
+    1. Save user message
+    2. Check for tool intent via llama3.2:1b
+    3. If tool needed — run it, feed result to dolphin3 for natural response
+    4. If no tool — use semantic search to find relevant memories
+    5. Send focused context to dolphin3
+    """
     save_message("user", prompt)
-    history = get_model_history()
-    
-    full_system = SYSTEM_PROMPT + "\n\n---\nTOOL INSTRUCTIONS (IMPORTANT - follow exactly):\n" + TOOL_DEFINITIONS
-    
+
+    # Step 1: Check for tool intent
+    tool_name, params = detect_tool_intent(prompt)
+
+    if tool_name:
+        # Run the tool
+        tool_result = call_tool(tool_name, params)
+
+        # Ask dolphin3 to respond naturally about what was done
+        follow_up_payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"You just ran the '{tool_name}' tool for me. The result was: {tool_result}. Tell me what you did in your own voice, briefly and naturally."}
+            ],
+            "stream": False
+        }
+        try:
+            resp = requests.post(CHAT_URL, json=follow_up_payload, timeout=60)
+            resp.raise_for_status()
+            reply = resp.json()["message"]["content"]
+            save_message("assistant", reply)
+            return reply
+        except Exception as e:
+            # Fallback — just confirm the tool ran
+            reply = f"Done — {tool_result}"
+            save_message("assistant", reply)
+            return reply
+
+    # Step 2: No tool needed — use semantic memory for focused context
+    all_history = get_all_history()
+    relevant = get_relevant_memories(prompt, all_history, top_k=6)
+
     payload = {
         "model": model,
         "messages": (
-            [{"role": "system", "content": full_system}]
-            + build_transient_context(client_context)
-            + history
+            [{"role": "system", "content": SYSTEM_PROMPT}]
+            + build_client_context_message(client_context)
+            + relevant
+            + [{"role": "user", "content": prompt}]
         ),
         "stream": False
     }
-    
+
     try:
         response = requests.post(CHAT_URL, json=payload, timeout=120)
         response.raise_for_status()
-        data = response.json()
-        reply = data["message"]["content"]
-        
-        # Check if Reverie wants to call a tool
-        tool_match = re.search(r"TOOL_CALL:\s*({.+})", reply)
-        if tool_match:
-            try:
-                tool_data = json.loads(tool_match.group(1))
-                tool_name = tool_data.get("tool")
-                params = tool_data.get("params", {})
-                tool_result = call_tool(tool_name, params)
-                
-                # Feed result back to Reverie
-                follow_up = f"Tool result for {tool_name}: {tool_result}. Now respond naturally to the user in your own voice about what you did and what was found."
-                
-                payload2 = {
-                    "model": model,
-                    "messages": (
-                        [{"role": "system", "content": full_system}]
-                        + history
-                        + [{"role": "assistant", "content": reply}]
-                        + [{"role": "user", "content": follow_up}]
-                    ),
-                    "stream": False
-                }
-                response2 = requests.post(CHAT_URL, json=payload2, timeout=120)
-                response2.raise_for_status()
-                final_reply = response2.json()["message"]["content"]
-                save_message("assistant", final_reply)
-                return final_reply
-                
-            except Exception as e:
-                save_message("assistant", reply)
-                return reply
-        
+        reply = response.json()["message"]["content"]
         save_message("assistant", reply)
         return reply
-        
     except Exception as e:
         return f"Reverie is unreachable: {e}"
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
@@ -189,11 +254,15 @@ def index():
 
 @app.route("/assets/<path:filename>", methods=["GET"])
 def assets(filename):
-    return send_from_directory(os.path.join(os.path.dirname(__file__), "assets"), filename)
+    return send_from_directory(
+        os.path.join(os.path.dirname(__file__), "assets"), filename
+    )
 
 @app.route("/reve-animations/<path:filename>", methods=["GET"])
 def reve_animations(filename):
-    return send_from_directory(os.path.join(os.path.dirname(__file__), "../../reve animations"), filename)
+    return send_from_directory(
+        os.path.join(os.path.dirname(__file__), "../../reve animations"), filename
+    )
 
 @app.route("/ask", methods=["POST"])
 @require_access_key
@@ -202,22 +271,24 @@ def ask_endpoint():
     prompt = str(data.get("prompt", "")).strip()
     model = str(data.get("model", DEFAULT_MODEL)).strip()
     client_context = str(data.get("client_context", "")).strip()
+
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
     if len(prompt) > MAX_PROMPT_CHARS:
-        return jsonify({"error": f"Prompt exceeds {MAX_PROMPT_CHARS} characters"}), 413
+        return jsonify({"error": f"Prompt too long (max {MAX_PROMPT_CHARS} chars)"}), 413
     if not VALID_MODEL_PATTERN.fullmatch(model):
         return jsonify({"error": "Invalid model name"}), 400
-    reply = ask_with_tools(prompt, model, client_context)
+
+    reply = ask(prompt, model, client_context)
     return jsonify({"reply": reply})
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
         "status": "Reverie is online",
+        "tool_router": TOOL_ROUTER_MODEL,
+        "conversation_model": DEFAULT_MODEL,
         "auth_required": bool(ACCESS_KEY),
-        "model_history_max_messages": MODEL_HISTORY_MAX_MESSAGES,
-        "model_history_max_chars": MODEL_HISTORY_MAX_CHARS
     })
 
 @app.route("/history", methods=["GET"])
@@ -243,6 +314,10 @@ def reset():
     db.session.commit()
     return jsonify({"status": "Memory cleared"})
 
+# ─── Run ──────────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     print("Reverie API online at http://0.0.0.0:5000")
+    print(f"Tool router: {TOOL_ROUTER_MODEL}")
+    print(f"Conversation model: {DEFAULT_MODEL}")
     app.run(host="0.0.0.0", port=5000, debug=False)

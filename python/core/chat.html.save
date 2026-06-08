@@ -492,7 +492,72 @@
             50% { transform: translateY(-2px); opacity: 1; }
         }
         @keyframes speakBars {
-            0%, 100% { height: 7px; opacity: 0.58; }
+<div class="actions">
+    <button class="ghost-btn" id="reset-btn" type="button">Reset</button>
+    <button class="ghost-btn" id="mic-btn" type="button">🎤</button>
+    <button id="send" type="button">Send</button>
+</div>
+Then find this line near the bottom of the JavaScript:
+
+javascript
+sendBtn.addEventListener('click', sendMessage);
+Add this line directly after it:
+
+javascript
+document.getElementById('mic-btn').addEventListener('click', toggleMic);
+Then find the closing </script> tag and add this just before it:
+
+javascript
+let recognition = null;
+let micActive = false;
+
+function toggleMic() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert('Speech recognition not supported in this browser. Try Chrome.');
+        return;
+    }
+    if (micActive) {
+        recognition.stop();
+        return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-AU';
+    recognition.onstart = () => {
+        micActive = true;
+        document.getElementById('mic-btn').textContent = '🔴';
+        document.getElementById('mic-btn').style.borderColor = 'var(--accent)';
+    };
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        input.value = transcript;
+        input.focus();
+    };
+    recognition.onend = () => {
+        micActive = false;
+        document.getElementById('mic-btn').textContent = '🎤';
+        document.getElementById('mic-btn').style.borderColor = '';
+    };
+    recognition.onerror = (event) => {
+        micActive = false;
+        document.getElementById('mic-btn').textContent = '🎤';
+        document.getElementById('mic-btn').style.borderColor = '';
+    };
+    recognition.start();
+}
+Save with Ctrl+X, then Y, then Enter.
+
+Restart brain.py:
+
+bash
+fuser -k 5000/tcp 2>/dev/null && python core/brain.py
+Open http://localhost:5000 — click the 🎤 button, allow microphone access, speak, and it'll drop your words into the text box ready to send.
+
+
+
+Clau            0%, 100% { height: 7px; opacity: 0.58; }
             50% { height: 22px; opacity: 1; }
         }
         @keyframes thinkingShift {
@@ -561,7 +626,6 @@
                 <textarea id="input" maxlength="12000" placeholder="Talk to Reve..."></textarea>
                 <div class="actions">
                     <button class="ghost-btn" id="reset-btn" type="button">Reset</button>
-                    <button class="ghost-btn" id="mic-btn" type="button">🎤</button>
                     <button id="send" type="button">Send</button>
                 </div>
             </div>
@@ -646,7 +710,6 @@
         document.addEventListener('pointermove', () => markActivity('present'), { passive: true });
         document.addEventListener('visibilitychange', updateActivityLine);
         sendBtn.addEventListener('click', sendMessage);
-        document.getElementById('mic-btn').addEventListener('click', toggleMic);
         resetBtn.addEventListener('click', resetMemory);
         refreshMemoryBtn.addEventListener('click', loadHistory);
         clearMemoryBtn.addEventListener('click', resetMemory);
@@ -1009,46 +1072,7 @@
         loadSpriteManifest();
         updateActivityLine();
         window.setInterval(updateActivityLine, 5000);
-
-        let recognition = null;
-        let micActive = false;
-
-        function toggleMic() {
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('Speech recognition not supported. Use Chrome.');
-                return;
-            }
-            if (micActive) {
-                recognition.stop();
-                return;
-            }
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.lang = 'en-AU';
-            recognition.onstart = () => {
-                micActive = true;
-                document.getElementById('mic-btn').textContent = '🔴';
-                document.getElementById('mic-btn').style.borderColor = 'var(--accent)';
-            };
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                input.value = transcript;
-                input.focus();
-            };
-            recognition.onend = () => {
-                micActive = false;
-                document.getElementById('mic-btn').textContent = '🎤';
-                document.getElementById('mic-btn').style.borderColor = '';
-            };
-            recognition.onerror = () => {
-                micActive = false;
-                document.getElementById('mic-btn').textContent = '🎤';
-                document.getElementById('mic-btn').style.borderColor = '';
-            };
-            recognition.start();
-        }
     </script>
 </body>
 </html>
+

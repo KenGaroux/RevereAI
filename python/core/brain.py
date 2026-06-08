@@ -9,6 +9,8 @@ from datetime import datetime
 from functools import wraps
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../'))
+from tools.system_tools import TOOLS
 from config.reverie import SYSTEM_PROMPT, DEFAULT_MODEL, OLLAMA_URL
 
 CHAT_URL = f"{OLLAMA_URL}/api/chat"
@@ -133,6 +135,35 @@ def ask(prompt, model=DEFAULT_MODEL, client_context=None):
     except Exception as e:
         return f"Reverie is unreachable: {e}"
 
+def detect_and_run_tool(prompt):
+    """Check if prompt is a tool request and execute it"""
+    prompt_lower = prompt.lower()
+    
+    # Open URL detection
+    if any(word in prompt_lower for word in ['open ', 'go to ', 'browse to ', 'navigate to ']):
+        import re
+        urls = re.findall(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\s]*)', prompt)
+        if urls:
+            return TOOLS['open_url']['function'](urls[0])
+    
+    # List files detection
+    if any(word in prompt_lower for word in ['list files', 'show files', 'what files', 'ls ']):
+        path = '~'
+        if 'in ' in prompt_lower:
+            parts = prompt_lower.split('in ')
+            if len(parts) > 1:
+                path = parts[-1].strip()
+        return TOOLS['list_files']['function'](path)
+    
+    # Create folder detection
+    if any(word in prompt_lower for word in ['create folder', 'make folder', 'mkdir', 'new folder']):
+        words = prompt.split()
+        if len(words) > 2:
+            return TOOLS['create_folder']['function']('~/' + words[-1])
+    
+    return None
+
+
 @app.route('/')
 def index():
     return send_file(os.path.join(os.path.dirname(__file__), 'chat.html'))
@@ -158,6 +189,11 @@ def ask_endpoint():
         return jsonify({'error': f'Prompt exceeds {MAX_PROMPT_CHARS} characters'}), 413
     if not VALID_MODEL_PATTERN.fullmatch(model):
         return jsonify({'error': 'Invalid model name'}), 400
+    # Check if this is a tool request first
+    tool_result = detect_and_run_tool(prompt)
+    if tool_result:
+        return jsonify({'reply': tool_result})
+    
     reply = ask(prompt, model, client_context)
     return jsonify({'reply': reply})
 

@@ -80,3 +80,9 @@ VISION_MODEL = "qwen2.5vl:7b"
 CODE_MODEL = "qwen2.5-coder:7b"
 FAST_MODEL = "llama3.2:1b"
 OLLAMA_URL = "http://192.168.224.1:11434"
+
+# Appended to SYSTEM_PROMPT to reduce over-eagerness
+TOOL_REMINDER = """
+
+IMPORTANT BEHAVIOURAL NOTE:
+When someone makes a casual statement like "I'm watching X" or "I'm listening to Y" — that is conversation, not a request. Do not assume they want you to open anything or take any action unless they explicitly ask you to do something. Read the room. Sometimes people just want to talk."""

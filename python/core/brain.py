@@ -11,7 +11,7 @@ from functools import wraps
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../"))
-from config.reverie import SYSTEM_PROMPT, DEFAULT_MODEL, OLLAMA_URL
+from config.reverie import SYSTEM_PROMPT, DEFAULT_MODEL, OLLAMA_URL, TOOL_REMINDER
 from tools.system_tools import TOOLS, TOOL_DEFINITIONS
 from tools.semantic_memory import get_relevant_memories
 
@@ -140,8 +140,9 @@ def detect_tool_intent(prompt):
     Returns (tool_name, params) or (None, None).
     """
     system = (
-        "You are a tool router. If a computer action is needed output ONLY JSON. "
-        "If no tool needed output ONLY: NONE\n\n"
+        "You are a tool router. Only output JSON if the user EXPLICITLY asks you to open, search, create, list or run something. "
+        "Casual statements like 'I am watching X' or 'I am listening to Y' are NOT tool requests — output NONE. "
+        "If no explicit computer action requested output ONLY: NONE\n\n"
         "Examples:\n"
         "- open youtube -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://youtube.com\"}}\n"
         "- open mumblechat.online -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://mumblechat.online\"}}\n"
@@ -229,7 +230,7 @@ def ask(prompt, model=DEFAULT_MODEL, client_context=None):
     payload = {
         "model": model,
         "messages": (
-            [{"role": "system", "content": SYSTEM_PROMPT}]
+            [{"role": "system", "content": SYSTEM_PROMPT + TOOL_REMINDER}]
             + build_client_context_message(client_context)
             + relevant
             + [{"role": "user", "content": prompt}]

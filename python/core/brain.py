@@ -140,18 +140,18 @@ def detect_tool_intent(prompt):
     Returns (tool_name, params) or (None, None).
     """
     system = (
-        "You are a tool router. Analyse the user message.\n"
-        "If a computer action is needed, output ONLY valid JSON like:\n"
-        "{\"tool\": \"tool_name\", \"params\": {\"key\": \"value\"}}\n"
-        "If no tool is needed, output ONLY the word: NONE\n\n"
-        "Available tools:\n"
-        "- open_url: open a website. params: {\"url\": \"https://...\"}\n"
-        "- list_files: list files in a folder. params: {\"path\": \"~/some/path\"}\n"
-        "- read_file: read a file. params: {\"path\": \"~/file.txt\"}\n"
-        "- create_folder: create a folder. params: {\"path\": \"~/new/folder\"}\n"
-        "- run_command: run safe terminal command. params: {\"command\": \"ls -la\"}\n"
-        "- web_search: search the web. params: {\"query\": \"search terms\"}\n"
-        "- play_music: play a music file. params: {\"path\": \"~/music/file.mp3\"}\n"
+        "You are a tool router. If a computer action is needed output ONLY JSON. "
+        "If no tool needed output ONLY: NONE\n\n"
+        "Examples:\n"
+        "- open youtube -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://youtube.com\"}}\n"
+        "- open mumblechat.online -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://mumblechat.online\"}}\n"
+        "- search youtube for X -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://youtube.com/results?search_query=X\"}}\n"
+        "- search google for X -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://google.com/search?q=X\"}}\n"
+        "- list files in deathai -> {\"tool\": \"list_files\", \"params\": {\"path\": \"~/deathai\"}}\n"
+        "- create folder music -> {\"tool\": \"create_folder\", \"params\": {\"path\": \"~/music\"}}\n"
+        "- search web for X -> {\"tool\": \"web_search\", \"params\": {\"query\": \"X\"}}\n"
+        "Replace X with the actual search terms from the user message. "
+        "For YouTube searches encode spaces as + in the URL."
     )
 
     try:

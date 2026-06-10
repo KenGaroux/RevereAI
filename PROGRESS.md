@@ -1,1 +1,2 @@
 - Problem 1: Two Sum — SOLVED 2026-06-08
+- Problem 125: Valid Palindrome — SOLVED 2026-06-10 — two pointers pattern

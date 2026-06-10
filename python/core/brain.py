@@ -26,7 +26,7 @@ MODEL_HISTORY_MAX_MESSAGES = int(os.getenv("MODEL_HISTORY_MAX_MESSAGES", "80"))
 MODEL_HISTORY_MAX_CHARS = int(os.getenv("MODEL_HISTORY_MAX_CHARS", "16000"))
 ACCESS_KEY = os.getenv("DEATHAI_ACCESS_KEY", "").strip()
 VALID_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
-TOOL_ROUTER_MODEL = "llama3.2:1b"
+TOOL_ROUTER_MODEL = "llama3.1:8b"
 
 # ─── Flask + DB ───────────────────────────────────────────────────────────────
 
@@ -140,20 +140,28 @@ def detect_tool_intent(prompt):
     Returns (tool_name, params) or (None, None).
     """
     system = (
-        "You are a tool router. Only output JSON if the user EXPLICITLY asks you to open, search, create, list or run something. "
-        "Casual statements like 'I am watching X' or 'I am listening to Y' are NOT tool requests — output NONE. "
-        "If no explicit computer action requested output ONLY: NONE\n\n"
+        "You are a tool router. Only output JSON if the user EXPLICITLY requests a computer action. "
+        "Casual statements are NOT tool requests — output NONE. "
+        "If no explicit action requested output ONLY: NONE\n\n"
         "Examples:\n"
         "- open youtube -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://youtube.com\"}}\n"
-        "- open mumblechat.online -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://mumblechat.online\"}}\n"
         "- search youtube for X -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://youtube.com/results?search_query=X\"}}\n"
+        "- open mumblechat.online -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://mumblechat.online\"}}\n"
         "- search google for X -> {\"tool\": \"open_url\", \"params\": {\"url\": \"https://google.com/search?q=X\"}}\n"
         "- list files in deathai -> {\"tool\": \"list_files\", \"params\": {\"path\": \"~/deathai\"}}\n"
-        "- create folder music -> {\"tool\": \"create_folder\", \"params\": {\"path\": \"~/music\"}}\n"
-        "- search web for X -> {\"tool\": \"web_search\", \"params\": {\"query\": \"X\"}}\n"
-        "Replace X with the actual search terms from the user message. "
-        "For YouTube searches encode spaces as + in the URL."
+        "- read my notes -> {\"tool\": \"read_notes\", \"params\": {}}\n"
+        "- save note X -> {\"tool\": \"save_note\", \"params\": {\"note\": \"X\"}}\n"
+        "- remind me in X minutes to Y -> {\"tool\": \"set_reminder\", \"params\": {\"message\": \"Y\", \"minutes\": X}}\n"
+        "- whats the weather -> {\"tool\": \"get_weather\", \"params\": {}}\n"
+        "- system info -> {\"tool\": \"system_info\", \"params\": {}}\n"
+        "- open spotify -> {\"tool\": \"open_app\", \"params\": {\"app\": \"spotify\"}}\n"
+        "- open vscode -> {\"tool\": \"open_app\", \"params\": {\"app\": \"vscode\"}}\n"
+        "- find python files -> {\"tool\": \"find_files\", \"params\": {\"pattern\": \"*.py\", \"path\": \"~/deathai\"}}\n"
+        "- read my progress -> {\"tool\": \"read_progress\", \"params\": {}}\n"
+        "- write to file X content Y -> {\"tool\": \"write_file\", \"params\": {\"path\": \"X\", \"content\": \"Y\"}}\n"
+        "Replace X and Y with actual values from the user message."
     )
+
 
     try:
         response = requests.post(CHAT_URL, json={
@@ -163,12 +171,17 @@ def detect_tool_intent(prompt):
                 {"role": "user", "content": prompt}
             ],
             "stream": False
-        }, timeout=15)
+        }, timeout=60)
         response.raise_for_status()
         reply = response.json()["message"]["content"].strip()
 
-        if reply.upper() == "NONE" or not reply.startswith("{"):
+        reply = reply.strip()
+        if "NONE" in reply.upper()[:10] or not "{" in reply:
             return None, None
+        # Extract JSON from response
+        start = reply.find("{")
+        end = reply.rfind("}") + 1
+        reply = reply[start:end]
 
         data = json.loads(reply)
         tool_name = data.get("tool") or data.get("tool_call")
